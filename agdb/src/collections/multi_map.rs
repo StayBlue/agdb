@@ -140,6 +140,7 @@ where
 
         let hash = key.stable_hash();
         let mut pos = hash % self.capacity();
+        let start_pos = pos;
         let mut free_pos = None;
         let mut ret = None;
 
@@ -166,7 +167,11 @@ where
                 MapValueState::Valid => {}
             }
 
-            pos = self.next_pos(pos)
+            pos = self.next_pos(pos);
+
+            if pos == start_pos {
+                break;
+            }
         }
 
         if let Some(pos) = free_pos {
@@ -968,5 +973,26 @@ mod tests {
         let values = map.values(&storage, &1).unwrap();
 
         assert_eq!(values, vec![10, 30]);
+    }
+
+    #[test]
+    fn insert_or_replace_without_empty_slots() {
+        let mut storage: Storage<MemoryStorage> = Storage::new("test").unwrap();
+        let mut map = MultiMapStorage::<u64, u64, MemoryStorage>::new(&mut storage).unwrap();
+
+        for key in 0..40 {
+            map.insert_or_replace(&mut storage, &key, |_| true, &key)
+                .unwrap();
+        }
+
+        // Each insert of a new key followed by its removal leaves a
+        // tombstone behind until no empty slot remains.
+        for key in 1000..1100 {
+            map.insert_or_replace(&mut storage, &key, |_| true, &key)
+                .unwrap();
+            map.remove_key(&mut storage, &key).unwrap();
+        }
+
+        assert_eq!(map.len(), 40);
     }
 }
